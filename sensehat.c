@@ -61,8 +61,58 @@ static int fb_height = 0;
 static int fb_bpp = 0;
 static int fb_bytes = 0;
 
+// Joystick support
+// Code modified from experix my-hat.tgz2
+// Copyright (C) 2004-2016 William Bayard McConnaughey
+
+// Refer to the sense-hat board diagram Sense-HAT-V1_0.pdf
+// The joystick is a SKRHABE010 (info. reference = http://www.alps.com/prod/
+// info/E/HTML/MultiControl/Switch/SKRH/SKRHABE010.html) connected via
+// COL_EN1..COL_EN5 to port D of the MCU. The MCU executes a cycle in which
+// it reads the joystick state and then drives the LED columns (which are
+// also connected to the COL_EN# lines; therefore these switch between input
+// and output during the cycle).
+//
+// Driver sources are in https://github.com/raspberrypi/linux/blob/rpi-4.1.y/
+// The joystick driver shows up in lsmod as rpisense_js and its source is
+// drivers/input/joystick/rpisense_js.c
+// It has no ioctls or fops. It #includes
+// include/linux/mfd/rpisense/joystick.h
+// include/linux/mfd/rpisense/core.h
+//
+// lsmod:  rpisense_core used by rpisense_js
+// drivers/mfd/rpisense_core.c
+//
+// from /usr/include/linux/input.h:
+// struct input_event {
+//        struct timeval time;
+//        __u16 type;
+//        __u16 code;
+//        __s32 value;
+// };
+// The joystick events and the corresponding keyboard events are:
+//  keyboard       joystick                    code
+//  ----------------------------------------------------
+//  <right arrow>  toward ethernet             106  0x6a
+//  <up arrow>     toward GPIO                 103  0x67
+//  <left arrow>   toward camera connector     105  0x69
+//  <down arrow>   toward nearest board edge   108  0x6c
+//  <enter>        press down                   28  0x1c
+//
+// A brief joystick connection produces 4 events:
+// type,code,value = 1,code,1; 0,0,0; 1,code,0; 0,0,0
+// Holding the joystick or key produces these events ({block} repeats):
+// type,code,value = 1,code,1; 0,0,0; { 1,code,2; 0,0,1; } 1,code,0; 0,0,0
+// (Quick keyboard presses produce 6 events).
+
+#include <linux/input.h>
+#define INPUTDEV = "/dev/input/event0"
+static char jsname[256];
+
+
 // I2C file handles
-static int file_led = -1; // LED array
+static int file_led = -1; // Framebuffer
+static int file_js  = -1; // Joystick event Input
 static int file_hum = -1; // humidity/temp sensor
 static int file_pres = -1; // pressure sensor
 static int file_acc = -1; // accelerometer/gyro
@@ -82,7 +132,8 @@ int shInit(int iChannel)
 {
 unsigned char ucTemp[32];
 char filename[32];
- 
+int retv;
+
 	sprintf(filename, "/dev/i2c-%d", iChannel);
 	if ((file_led = open(filename, O_RDWR)) < 0)
 	{
@@ -91,36 +142,57 @@ char filename[32];
 	}
 
 	file_led = open(FBDEV, O_RDWR);
-    	if (file_led < 0)
-    	{
-    		fprintf(stderr, "Failed to open Framebuffer for LED Matrix\n");
+	if (file_led < 0)
+	{
+		fprintf(stderr, "Failed to open Framebuffer for LED Matrix\n");
 		goto badexit;
-    	}
+	}
 
-    	// get screen dimensions
-    	struct fb_var_screeninfo vinfo;
-    	ioctl (file_led, FBIOGET_VSCREENINFO, &vinfo);
-
-    	fb_width = vinfo.xres;
-    	fb_height = vinfo.yres;
-    	fb_bpp = vinfo.bits_per_pixel;
-    	fb_bytes = fb_bpp / 8;
-    	// printf("FB Width (%d) Height (%d) BPP (%d) fb_bytes (%d)\n", fb_width,fb_height,fb_bpp, fb_bytes);
-
-    	// Map screen into memory
-    	framebufsize = fb_width * fb_height * fb_bytes;
-
-    	framebuffer = mmap (0, framebufsize,
-            PROT_READ | PROT_WRITE, MAP_SHARED, file_led, (off_t)0);
-    	// printf("Framebuffer Size = %d\n", framebufsize);
-    	if (framebuffer == NULL)
-    	{
-    		fprintf(stderr, "Failed to mmap() Framebuffer\n");
+	// get screen dimensions
+	struct fb_var_screeninfo vinfo;
+	retv = ioctl (file_led, FBIOGET_VSCREENINFO, &vinfo);
+	if (retv < 0)
+	{
+		fprintf(stderr, "ioctl() error for LED Matrix Framebuffer\n");
 		goto badexit;
-    	}
+	}
+
+	fb_width = vinfo.xres;
+	fb_height = vinfo.yres;
+	fb_bpp = vinfo.bits_per_pixel;
+	fb_bytes = fb_bpp / 8;
+	// printf("FB Width (%d) Height (%d) BPP (%d) fb_bytes (%d)\n", fb_width,fb_height,fb_bpp, fb_bytes);
+
+	// Map screen into memory
+	framebufsize = fb_width * fb_height * fb_bytes;
+
+	framebuffer = mmap (0, framebufsize,
+		PROT_READ | PROT_WRITE, MAP_SHARED, file_led, (off_t)0);
+	// printf("Framebuffer Size = %d\n", framebufsize);
+	if (framebuffer == NULL)
+	{
+		fprintf(stderr, "Failed to mmap() Framebuffer\n");
+		goto badexit;
+	}
 
 	// Fill the LED with black
 	memset(framebuffer, 0, framebufsize);
+
+	file_js = open(INPUTDEV, O_RDONLY);
+	if (file_js < 0)
+	{
+		fprintf(stderr, "Failed to open Joystick Event Input\n");
+		goto badexit;
+	}
+	retv = ioctl(file_js, EVIOCGNAME(sizeof(jsname)), jsname);
+	if (retv < 0)
+	{
+		fprintf(stderr, "ioctl() error for Joystick Event Input\n");
+		goto badexit;
+	}
+	else
+		fprintf(stderr, "Input device %s is %s\n", file_js, jsname);
+
 
 	file_acc = open(filename, O_RDWR);
 	if (ioctl(file_acc, I2C_SLAVE, 0x6a) < 0)
@@ -369,7 +441,7 @@ void shShutdown(void)
 	memset(framebuffer, 0, framebufsize);
 	if (munmap(framebuffer, framebufsize) < 0)
 	{
-                fprintf(stderr, "Failed to munmap() Framebuffer\n");
+		fprintf(stderr, "Failed to munmap() Framebuffer\n");
 	}
 
 	// Close all I2C file handles
@@ -410,14 +482,38 @@ int rc;
 
 unsigned char shReadJoystick(void)
 {
-unsigned char ucBuf[2];
-int rc;
+int rd;
+unsigned char retval;
+struct input_event jsev;
 
-	if (file_led != -1)
-	{
-		rc = i2cRead(file_led, 0xf2, ucBuf, 1);
-		if (rc == 1)
-			return ucBuf[0];
-	}
-	return 0;
+    rd = read(file_js, &jsev, sizeof(struct input_event));
+    if (rd < 0)
+    {
+		fprintf(stderr, "Failed to read Joystick Input\n");
+    	return 0;
+    }
+    else
+    {
+    	fprintf(stderr, "JS Input %d bytes; ev.type=%d ev.code=%d ev.value=%d\n",
+    		      rd, jsev.type, jsev.code, jsev.value);
+
+    	// we need a state machine to track input events
+    	switch (jsev.type) {
+    	case 0:
+    		// ignore event delimiter marker
+        	retval = 0;
+    		break;
+    	case 1:
+    		if ((jsev.value == 0)|| (jsev.value == 2))
+    			// Release, or repeat (hold)
+   				retval = jsev.code;
+    		break;
+    	default:
+    		retval = 0;
+    		break;
+    	}
+
+    	return retval;
+    }
+
 } /* shReadJoystick() */
