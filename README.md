@@ -17,3 +17,12 @@ any special software. The code here is not complete in that it doesn't expose
 all modes/options of the sensors. It does provide a minimal example of how to 
 initialize and read data from them. I have tested the Sense Hat on Raspberry
 Pi computers (1B/3B/ZeroW) and Orange Pi boards.
+
+KMod Compatible Version
+-----------------------
+May 17 2023
+
+Copyright (c) 2023 TC Wan
+Updated for SenseHat kmod support found in most recent kernels.
+Tested with Ubuntu 22.04 on RPi 4
+
