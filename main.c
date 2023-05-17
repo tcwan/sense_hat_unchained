@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
 int i;
 unsigned char ucKeys;
 
-	if (shInit(0) == 0) // Open I2C	
+	if (shInit(1) == 0) // Open I2C
 	{
 		printf("Unable to open sense hat; is it connected?\n");
 		return -1;
