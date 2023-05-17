@@ -23,6 +23,9 @@ KMod Compatible Version
 May 17 2023
 
 Copyright (c) 2023 TC Wan
+
 Updated for SenseHat kmod support found in most recent kernels.
+
 Tested with Ubuntu 22.04 on RPi 4
+
 
