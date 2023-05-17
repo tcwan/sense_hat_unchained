@@ -1,15 +1,22 @@
-CFLAGS=-c -Wall -O2
+CC=aarch64-linux-gnu-gcc
+AR=aarch64-linux-gnu-ar
+CFLAGS=-g -c -Wall -O2 -I.
+LIBS= -L. -lsensehat -lpthread -lm
 
-all: libsensehat.a
+all: sensedemo
+
+sensedemo: libsensehat.a main.o
+	$(CC) main.o $(LIBS) -o sensedemo
+
+main.o: main.c
+	$(CC) $(CFLAGS) main.c
 
 libsensehat.a: sensehat.o
-	ar -rc libsensehat.a sensehat.o ;\
-	sudo cp libsensehat.a /usr/local/lib ;\
-	sudo cp sensehat.h /usr/local/include
+	$(AR) -rc libsensehat.a sensehat.o
 
 sensehat.o: sensehat.h sensehat.c
 	$(CC) $(CFLAGS) sensehat.c
 
 clean:
-	rm *.o libsensehat.a
+	rm -f *.o sensedemo libsensehat.a
 
