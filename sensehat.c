@@ -19,6 +19,9 @@
 // Copyright (c) 2017 BitBank Software, Inc.
 // bitbank@pobox.com
 //
+// Modified for Ubuntu Linux with framebuffer and joystick event
+// support by TC Wan - May 16, 2023
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
@@ -32,6 +35,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -40,15 +44,22 @@
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 
-//
-// The LED Array is handled by a dedicated microcontroller
-// It must be updated in a single shot by writing
-// 192 bytes starting at register 0
-// The memory is laid out in each row like this:
-// RRRRRRRRGGGGGGGGBBBBBBBB
-// Each byte can have 64 unique levels (0-63)
-// 
-static unsigned char LEDArray[192];
+// See example of how to program the Framebuffer at
+// https://kevinboone.me/linuxfbc.html?i=1
+// The Framebuffer and Joystick Input occupies I2C Address 0x46
+
+#include <linux/fb.h>
+#include <sys/mman.h>
+
+#define FBDEV "/dev/fb0"
+int framebufsize = 0;
+unsigned char *framebuffer = NULL;
+
+// FB parameters
+int fb_width = 0;
+int fb_height = 0;
+int fb_bpp = 0;
+int fb_bytes = 0;
 
 // I2C file handles
 static int file_led = -1; // LED array
@@ -79,11 +90,37 @@ char filename[32];
 		return -1;
 	}
 
-	if (ioctl(file_led, I2C_SLAVE, 0x46) < 0)
-	{
-		fprintf(stderr, "Failed to acquire bus for LED matrix\n");
+	file_led = open(FBDEV, O_RDWR);
+    	if (file_led < 0)
+    	{
+    		fprintf(stderr, "Failed to open Framebuffer for LED Matrix\n");
 		goto badexit;
-	}
+    	}
+
+    	// get screen dimensions
+    	struct fb_var_screeninfo vinfo;
+    	ioctl (file_led, FBIOGET_VSCREENINFO, &vinfo);
+
+    	fb_width = vinfo.xres;
+    	fb_height = vinfo.yres;
+    	fb_bpp = vinfo.bits_per_pixel;
+    	fb_bytes = fb_bpp / 8;
+    	// printf("FB Width (%d) Height (%d) BPP (%d) fb_bytes (%d)\n", fb_width,fb_height,fb_bpp, fb_bytes);
+
+    	// Map screen into memory
+    	framebufsize = fb_width * fb_height * fb_bytes;
+
+    	framebuffer = mmap (0, framebufsize,
+            PROT_READ | PROT_WRITE, MAP_SHARED, file_led, (off_t)0);
+    	// printf("Framebuffer Size = %d\n", framebufsize);
+    	if (framebuffer == NULL)
+    	{
+    		fprintf(stderr, "Failed to mmap() Framebuffer\n");
+		goto badexit;
+    	}
+
+	// Fill the LED with black
+	memset(framebuffer, 0, framebufsize);
 
 	file_acc = open(filename, O_RDWR);
 	if (ioctl(file_acc, I2C_SLAVE, 0x6a) < 0)
@@ -97,10 +134,6 @@ char filename[32];
 		fprintf(stderr, "Failed to acquire bus for magnetometer\n");
 		goto badexit;
 	}
-
-	// Fill the LED with black
-	memset(LEDArray, 0, sizeof(LEDArray));
-	i2cWrite(file_led, 0, LEDArray, sizeof(LEDArray));
 
 	file_hum = open(filename, O_RDWR);
 	if (ioctl(file_hum, I2C_SLAVE, 0x5f) < 0)
@@ -205,14 +238,9 @@ int i;
 
 	if (x >= 0 && x < 8 && y >= 0 && y < 8 && file_led >= 0)
 	{
-		i = (y*24)+x; // offset into array
-		LEDArray[i] = (uint8_t)((color >> 10) & 0x3e); // Red
-		LEDArray[i+8] = (uint8_t)((color >> 5) & 0x3f); // Green
-		LEDArray[i+16] = (uint8_t)((color << 1) & 0x3e); // Blue
-		if (bUpdate)
-		{
-			i2cWrite(file_led, 0, LEDArray, 192); // have to send the whole array at once
-		}
+		i = (y*fb_width+x) * fb_bytes;
+		framebuffer[i] = (color & 0xFF00) >> 8;
+		framebuffer[i+1] = (color & 0xFF);
 		return 1;
 	}
 	return 0;
@@ -338,8 +366,11 @@ int tmp;
 void shShutdown(void)
 {
 	// Blank the LED array
-	memset(LEDArray, 0, sizeof(LEDArray));
-	i2cWrite(file_led, 0, LEDArray, 192);
+	memset(framebuffer, 0, framebufsize);
+	if (munmap(framebuffer, framebufsize) < 0)
+	{
+                fprintf(stderr, "Failed to munmap() Framebuffer\n");
+	}
 
 	// Close all I2C file handles
 	if (file_led != -1) close(file_led);
