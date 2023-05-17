@@ -191,7 +191,12 @@ int retv;
 		goto badexit;
 	}
 	else
+	{
 		fprintf(stderr, "Input device %s is %s\n", INPUTDEV, jsname);
+		// Make it non-blocking
+		int flags = fcntl(file_js, F_GETFL, 0);
+		fcntl(file_js, F_SETFL, flags | O_NONBLOCK);
+	}
 
 
 	file_acc = open(filename, O_RDWR);
@@ -489,13 +494,14 @@ struct input_event jsev;
     rd = read(file_js, &jsev, sizeof(struct input_event));
     if (rd < 0)
     {
-		fprintf(stderr, "Failed to read Joystick Input\n");
+		// fprintf(stderr, "Failed to read Joystick Input\n");
+    	// Nonblocking read() returns errno == EAGAIN
     	return 0;
     }
     else
     {
-    	fprintf(stderr, "JS Input %d bytes; ev.type=%d ev.code=%d ev.value=%d\n",
-    		      rd, jsev.type, jsev.code, jsev.value);
+    	// fprintf(stderr, "JS Input %d bytes; ev.type=%d ev.code=%d ev.value=%d\n",
+    	//	      rd, jsev.type, jsev.code, jsev.value);
 
     	// we need a state machine to track input events
     	switch (jsev.type) {
