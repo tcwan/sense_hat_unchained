@@ -106,7 +106,7 @@ static int fb_bytes = 0;
 // (Quick keyboard presses produce 6 events).
 
 #include <linux/input.h>
-#define INPUTDEV = "/dev/input/event0"
+#define INPUTDEV "/dev/input/event0"
 static char jsname[256];
 
 
@@ -191,7 +191,7 @@ int retv;
 		goto badexit;
 	}
 	else
-		fprintf(stderr, "Input device %s is %s\n", file_js, jsname);
+		fprintf(stderr, "Input device %s is %s\n", INPUTDEV, jsname);
 
 
 	file_acc = open(filename, O_RDWR);
@@ -483,7 +483,7 @@ int rc;
 unsigned char shReadJoystick(void)
 {
 int rd;
-unsigned char retval;
+unsigned char retval = 0;
 struct input_event jsev;
 
     rd = read(file_js, &jsev, sizeof(struct input_event));
