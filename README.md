@@ -26,6 +26,63 @@ Copyright (c) 2023 TC Wan
 
 Updated for SenseHat kmod support found in most recent kernels.
 
-Tested with Ubuntu 22.04 on RPi 4
+Tested with Ubuntu 22.04 on RPi 4.
+
+### Device Names
+This library assumes that the LED Matrix is mapped to /dev/fb0
+and the Joystick is mapped to /dev/input/event0
+
+If they are different on your setup, you should modify the #defines for
+FBDEV and INPUTDEV in sensehat.c respectively.
+
+## Ubuntu Configuration
+In order to program the SenseHat with Ubuntu, you will need to configure Ubuntu 
+as follows:
+
+### Create udev rules
+To avoid having to run the program using sudo, we enable global access to the 
+i2c device.
+```
+$ sudo vi /etc/udev/rules.d/99-i2c.rules
+KERNEL=="i2c-[0-7]",MODE="0666"
+```
+### Blacklist Industrial I/O Drivers
+These drivers take over the I2C bus and prevents the library from talking to 
+the devices directly.
+
+```
+$ sudo vi /etc/modprobe.d/blacklist-industrialio.conf
+blacklist st_magn_spi
+blacklist st_pressure_spi
+blacklist st_sensors_spi
+blacklist st_pressure_i2c
+blacklist st_magn_i2c
+blacklist st_pressure
+blacklist st_magn
+blacklist st_sensors_i2c
+blacklist st_sensors
+blacklist industrialio_triggered_buffer
+blacklist industrialio
+```
+
+### Verify I2C Configuration
+To check that the SenseHat is accessible via I2C at the default addresses.
+
+See [SenseHat Info](https://pinout.xyz/pinout/sense_hat#).
 
 
+```
+$ sudo apt-get install i2c-tools
+$ i2cdetect -y 1
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:                         -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- -- -- -- -- -- -- -- 1c -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- UU -- -- -- -- -- -- -- -- -- 
+50: -- -- -- -- -- -- -- -- -- -- -- -- 5c -- -- 5f 
+60: -- -- -- -- -- -- -- -- -- -- 6a -- -- -- -- -- 
+70: -- -- -- -- -- -- -- -- 
+
+UU: Reserved by kernel drivers (rpisense_fb, rpisense_js, rpisense_core)
+```
