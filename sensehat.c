@@ -52,14 +52,14 @@
 #include <sys/mman.h>
 
 #define FBDEV "/dev/fb0"
-int framebufsize = 0;
-unsigned char *framebuffer = NULL;
+static int framebufsize = 0;
+static unsigned char *framebuffer = NULL;
 
 // FB parameters
-int fb_width = 0;
-int fb_height = 0;
-int fb_bpp = 0;
-int fb_bytes = 0;
+static int fb_width = 0;
+static int fb_height = 0;
+static int fb_bpp = 0;
+static int fb_bytes = 0;
 
 // I2C file handles
 static int file_led = -1; // LED array
