@@ -26,7 +26,7 @@
     // Location of the application binary file
     "APP_BIN_DIR": "${workspaceFolder}",
     // Name of the application binary file
-    "APP_BIN_NAME": "${workspaceFolderBasename}.elf",
+    "APP_BIN_NAME": "sensedemo",
     // Embeded board Linux user name
     "TARGET_USER": "xxxx",
     // Location of the applicaton on the embedded board
