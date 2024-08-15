@@ -58,6 +58,7 @@ dkms.conf
 
 # VSC Project specific
 **/settings.json
+**/devcontainer.json
 
 # Binaries
 Debug/
