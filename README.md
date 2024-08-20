@@ -33,7 +33,7 @@ Tested with Ubuntu 24.04 on RPi 5
 This library assumes that the LED Matrix is mapped to /dev/fbX
 and the Joystick is mapped to /dev/input/eventX
 
-The autodetec logic came from the Astro-Pi Python code.
+The autodetect logic came from the Astro-Pi Python code.
 
 ## Ubuntu Configuration
 In order to program the SenseHat with Ubuntu, you will need to configure Ubuntu 
