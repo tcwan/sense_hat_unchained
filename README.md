@@ -20,24 +20,31 @@ Pi computers (1B/3B/ZeroW) and Orange Pi boards.
 
 KMod Compatible Version
 -----------------------
-May 17 2023
+Aug 20 2024
 
-Copyright (c) 2023 TC Wan
+Copyright (c) 2023-2024 TC Wan
 
 Updated for SenseHat kmod support found in most recent kernels.
 
-Tested with Ubuntu 22.04 on RPi 4.
+Tested with Ubuntu 24.04 on RPi 5 
+(should be able to autodetect LED Matrix and Joystick on RPi 4 as well).
 
 ### Device Names
-This library assumes that the LED Matrix is mapped to /dev/fb0
-and the Joystick is mapped to /dev/input/event0
+This library assumes that the LED Matrix is mapped to /dev/fbX
+and the Joystick is mapped to /dev/input/eventX
 
-If they are different on your setup, you should modify the #defines for
-FBDEV and INPUTDEV in sensehat.c respectively.
+The autodetec logic came from the Astro-Pi Python code.
 
 ## Ubuntu Configuration
 In order to program the SenseHat with Ubuntu, you will need to configure Ubuntu 
 as follows:
+
+### Force RPi SenseHat Detection
+(This is needed for Ubuntu 24.04)
+$ sudo vi /boot/firmware/config.txt
+[all]
+# Force RPi SenseHat Detection
+dtoverlay=rpi-sense
 
 ### Create udev rules
 To avoid having to run the program using sudo, we enable global access to the 
@@ -46,12 +53,12 @@ i2c device.
 $ sudo vi /etc/udev/rules.d/99-i2c.rules
 KERNEL=="i2c-[0-7]",MODE="0666"
 ```
-### Blacklist Industrial I/O Drivers
+### Blacklist SenseHat Industrial I/O Drivers
 These drivers take over the I2C bus and prevents the library from talking to 
 the devices directly.
 
 ```
-$ sudo vi /etc/modprobe.d/blacklist-industrialio.conf
+$ sudo vi /etc/modprobe.d/blacklist-sensehat-industrialio.conf
 blacklist st_magn_spi
 blacklist st_pressure_spi
 blacklist st_sensors_spi
@@ -61,8 +68,10 @@ blacklist st_pressure
 blacklist st_magn
 blacklist st_sensors_i2c
 blacklist st_sensors
-blacklist industrialio_triggered_buffer
-blacklist industrialio
+blacklist hts221_i2c
+# Don't blacklist industrialio as it is used by other drivers
+# blacklist industrialio_triggered_buffer
+# blacklist industrialio
 ```
 
 ### Verify I2C Configuration

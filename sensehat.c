@@ -51,7 +51,14 @@
 #include <linux/fb.h>
 #include <sys/mman.h>
 
-#define FBDEV "/dev/fb0"
+#define SENSE_FB_IDSTR "RPi-Sense FB\n"
+#define SYSFBPATH "/sys/class/graphics"
+#define SYSFBDEVNAME "fb"
+#define SYSFB_IDPATH "name"
+
+
+#define FBDEV_PATH "/dev"
+static char FBDEV[256] = { 0 };
 static int framebufsize = 0;
 static unsigned char *framebuffer = NULL;
 
@@ -106,7 +113,13 @@ static int fb_bytes = 0;
 // (Quick keyboard presses produce 6 events).
 
 #include <linux/input.h>
-#define INPUTDEV "/dev/input/event0"
+#define SENSE_JS_IDSTR "Raspberry Pi Sense HAT Joystick\n"
+#define SYSINPUTPATH "/sys/class/input"
+#define SYSINPUTDEVNAME "event"
+#define SYSINPUT_IDPATH "device/name"
+
+#define INPUTDEV_PATH "/dev/input"
+static char INPUTDEV[256] = { 0 };
 static char jsname[256];
 
 
@@ -126,12 +139,68 @@ static int T1_degC_x8, H0_T0_OUT;
 static int H1_T0_OUT, T0_OUT, T1_OUT;
 
 //
+// Find Sense Hat Kernel Device
+//
+#include <dirent.h>
+#define MAX_FILE_NAME_SIZE 256
+#pragma GCC diagnostic ignored "-Wformat-truncation"			// To get rid of snprintf() warnings
+	
+void findKDevName(const char *searchPath, const char *sysName, const char *devIDPath, const char*devIDStr, char *devName)
+{
+    char full_name[MAX_FILE_NAME_SIZE] = { 0 };
+	char device_id_name[MAX_FILE_NAME_SIZE] = { 0 };
+
+	// Initialize return value
+	devName[0] = '\0'; // Null string
+
+    DIR* directory = opendir(searchPath);
+    if (directory == NULL) {
+        fprintf(stderr, "Can't open %s\n", searchPath);
+		return;
+    }
+
+    struct dirent* entry = NULL;
+    while ((entry = readdir(directory)) != NULL) {
+		if (entry->d_type == DT_DIR) {
+			// skip
+            // printf("'%s' is a directory\n", entry->d_name);
+		} else {
+			if (strstr(entry->d_name,sysName)) {
+				// We are ignoring fbcon device handling here
+		        snprintf(full_name, sizeof(full_name), "%s/%s/%s", searchPath, entry->d_name, devIDPath);
+				// printf("Will open %s\n",full_name);
+				FILE *fp = fopen(full_name, "r");
+				if (fp) {
+					if (fgets(device_id_name,MAX_FILE_NAME_SIZE,fp) != NULL) {
+						// printf("Device ID Name = %s\n", device_id_name);
+						if (strncmp(device_id_name,devIDStr,MAX_FILE_NAME_SIZE) == 0) {
+							strncpy(devName,entry->d_name, MAX_FILE_NAME_SIZE);
+							return;		// Return once we found a matching device
+						}					
+					}
+				} else {
+					fprintf(stderr, "Error opening %s\n",full_name);
+				}
+			}
+			else {
+				// no match, discard
+				// printf ("Discarding %s\n",entry->d_name);
+			}
+		}
+    }
+    closedir(directory);
+	return;
+}
+
+
+//
 // Opens file system handles to the I2C devices
 //
 int shInit(int iChannel)
 {
 unsigned char ucTemp[32];
 char filename[32];
+char kdevName[MAX_FILE_NAME_SIZE];
 int retv;
 
 	sprintf(filename, "/dev/i2c-%d", iChannel);
@@ -141,12 +210,19 @@ int retv;
 		return -1;
 	}
 
-	file_led = open(FBDEV, O_RDWR);
-	if (file_led < 0)
-	{
-		fprintf(stderr, "Failed to open Framebuffer for LED Matrix\n");
+	// Find FB Device
+	findKDevName(SYSFBPATH, SYSFBDEVNAME, SYSFB_IDPATH, SENSE_FB_IDSTR, kdevName);
+	if (strnlen(kdevName, MAX_FILE_NAME_SIZE) > 0) {
+		snprintf(FBDEV, sizeof(FBDEV), "%s/%s", FBDEV_PATH, kdevName);
+		file_led = open(FBDEV, O_RDWR);
+		if (file_led < 0)
+		{
+			fprintf(stderr, "Failed to open Framebuffer for LED Matrix\n");
+			goto badexit;
+		}
+
+	} else
 		goto badexit;
-	}
 
 	// get screen dimensions
 	struct fb_var_screeninfo vinfo;
@@ -178,12 +254,20 @@ int retv;
 	// Fill the LED with black
 	memset(framebuffer, 0, framebufsize);
 
-	file_js = open(INPUTDEV, O_RDONLY);
-	if (file_js < 0)
-	{
-		fprintf(stderr, "Failed to open Joystick Event Input\n");
+	// Find JS Device
+	findKDevName(SYSINPUTPATH, SYSINPUTDEVNAME, SYSINPUT_IDPATH, SENSE_JS_IDSTR, kdevName);
+	if (strnlen(kdevName, MAX_FILE_NAME_SIZE) > 0) {
+		snprintf(INPUTDEV, sizeof(INPUTDEV), "%s/%s", INPUTDEV_PATH, kdevName);
+		file_js = open(INPUTDEV, O_RDONLY);
+		if (file_js < 0)
+		{
+			fprintf(stderr, "Failed to open Joystick Event Input\n");
+			goto badexit;
+		}
+
+	} else
 		goto badexit;
-	}
+
 	retv = ioctl(file_js, EVIOCGNAME(sizeof(jsname)), jsname);
 	if (retv < 0)
 	{
@@ -192,7 +276,7 @@ int retv;
 	}
 	else
 	{
-		fprintf(stderr, "Input device %s is %s\n", INPUTDEV, jsname);
+		fprintf(stderr, "Input device %s is %s\n", kdevName, jsname);
 		// Make it non-blocking
 		int flags = fcntl(file_js, F_GETFL, 0);
 		fcntl(file_js, F_SETFL, flags | O_NONBLOCK);
