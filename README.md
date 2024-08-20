@@ -41,10 +41,12 @@ as follows:
 
 ### Force RPi SenseHat Detection
 (This is needed for Ubuntu 24.04)
+```
 $ sudo vi /boot/firmware/config.txt
 [all]
 # Force RPi SenseHat Detection
 dtoverlay=rpi-sense
+```
 
 ### Create udev rules
 To avoid having to run the program using sudo, we enable global access to the 
