@@ -30,5 +30,5 @@
     // Location of the application binary file
     "APP_BIN_DIR": "${workspaceFolder}",
     // Name of the application binary file
-    "APP_BIN_NAME": "sensedemo"
+    "APP_BIN_NAME": "${workspaceFolderBasename}.elf"
 }
